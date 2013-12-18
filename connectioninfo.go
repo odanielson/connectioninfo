@@ -1,4 +1,5 @@
-
+// Package connectioninfo implements functions to lookup information about
+// network connections.
 package connectioninfo
 
 import (
@@ -10,6 +11,8 @@ import (
     "strconv"
     "net"
 )
+
+// Conn represents a network connection.
 type Conn struct {
     src net.IP
     src_port int
@@ -17,10 +20,30 @@ type Conn struct {
     dst_port int
 }
 
+// ConnInfo contains meta information about a connection.
 type ConnInfo struct {
     conn Conn
     inode int
     processInfo pidinfo.ProcessInfo
+}
+
+// LookupTcpConnection returns the inode number for connection given by a_conn
+func LookupTcpConnection(a_conn Conn) int {
+    if data, err := ioutil.ReadFile("/proc/net/tcp"); err == nil {
+        reader := bytes.NewReader(data)
+        scanner := bufio.NewScanner(reader)
+        for scanner.Scan() {
+            entry := parseLine(scanner.Text())
+            if (entry.conn.match(&a_conn)) {
+                var info = pidinfo.FindProcessForInode(entry.inode);
+                fmt.Printf("Found in cmd %s (pid = %d)\n", info.Cmd,
+                    info.Pid);
+                return entry.inode
+            }
+        }
+    }
+    return -1;
+
 }
 
 func (a *Conn) match(b *Conn) bool {
@@ -55,29 +78,13 @@ func parseLine(line string) ConnInfo {
     return entry
 }
 
-func LookupTcpConnection(a_conn Conn) int {
-    if data, err := ioutil.ReadFile("/proc/net/tcp"); err == nil {
-        reader := bytes.NewReader(data)
-        scanner := bufio.NewScanner(reader)
-        for scanner.Scan() {
-            entry := parseLine(scanner.Text())
-            if (entry.conn.match(&a_conn)) {
-                var info = pidinfo.ScanProcessesForInode(entry.inode);
-                fmt.Printf("Found in cmd %s (pid = %d)\n", info.Cmd,
-                    info.Pid);
-                return entry.inode
-            }
-        }
-    }
-    return -1;
-
+// Print out a representation of a_conn
+func PrintConn(a_conn Conn) {
+    fmt.Printf("%s:%d -> %s:%d\n", a_conn.src, a_conn.src_port, a_conn.dst,
+        a_conn.dst_port);
 }
 
-func printConn(conn Conn) {
-    fmt.Printf("%s:%d -> %s:%d\n", conn.src, conn.src_port, conn.dst,
-        conn.dst_port);
-}
-
+// Parse params a_src and a_dst into a Conn object
 func ParseConn(a_src string, a_dst string) Conn {
     var c Conn;
     var src, port string;
